@@ -6,7 +6,8 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { connect, items, wears, toItem, toWear } from './db';
 import { DEFAULT_TAGS, cleanTags } from './tags';
 import { tagPhoto } from './tagger';
-import { FATIGUE_WEARS, itemUsage, outfitRepeats, pairingCounts, suggestOutfit, unwornOutfits } from './pairings';
+import { cutOut } from './cutout';
+import { FATIGUE_WEARS, itemUsage, outfitRepeats, pairingCounts, unwornOutfits } from '../shared/pairings';
 
 const PHOTO_DIR = new URL('../data/photos/', import.meta.url).pathname;
 const DIST_DIR = new URL('../dist/', import.meta.url).pathname;
@@ -29,13 +30,21 @@ app.get('/api/items', async (_req, res) => {
 app.post('/api/items', upload.single('photo'), async (req, res) => {
   if (!req.file) return void res.status(400).json({ error: 'photo is required' });
 
-  const photo = `${randomUUID()}.jpg`;
-  await writeFile(PHOTO_DIR + photo, req.file.buffer);
+  // Cutting out the background and tagging are independent, so run them together.
+  const [cutout, suggested] = await Promise.all([
+    cutOut(req.file.buffer).catch((error) => {
+      console.error('background removal failed, keeping the original photo:', error);
+      return null;
+    }),
+    tagPhoto(req.file.buffer).catch((error) => {
+      console.error('tagging failed, adding item untagged:', error);
+      return {};
+    }),
+  ]);
 
-  const suggested = await tagPhoto(req.file.buffer).catch((error) => {
-    console.error('tagging failed, adding item untagged:', error);
-    return {};
-  });
+  const photo = `${randomUUID()}.${cutout ? 'png' : 'jpg'}`;
+  await writeFile(PHOTO_DIR + photo, cutout ?? req.file.buffer);
+
   const doc = { ...DEFAULT_TAGS, ...suggested, photo, createdAt: new Date() };
   const { insertedId } = await items.insertOne(doc);
   res.status(201).json(toItem({ ...doc, _id: insertedId }));
@@ -98,11 +107,6 @@ app.get('/api/insights', async (_req, res) => {
     fatigued: usage.filter((u) => u.recentWears >= FATIGUE_WEARS),
     usage,
   });
-});
-
-app.get('/api/suggestion', async (_req, res) => {
-  const [allItems, allWears] = await Promise.all([loadItems(), loadWears()]);
-  res.json(suggestOutfit(allItems, allWears, today()));
 });
 
 // ---- Production: serve the built UI from the same process ----

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Item, Wear } from '../shared/types';
-import { outfitRepeats, pairingCounts, suggestOutfit, unwornOutfits, validOutfits } from './pairings';
+import type { Item, Wear } from './types';
+import { lastWornTogether, outfitRepeats, pairingCounts, problems, suggestOutfit, unwornOutfits, validOutfits } from './pairings';
 
 let nextId = 0;
 const item = (overrides: Partial<Item>): Item => ({
@@ -43,6 +43,12 @@ test('allows a single pattern but not two', () => {
   assert.ok(!outfits.includes('striped tee + plaid jeans + sneakers'));
 });
 
+test('problems explains why an outfit does not work', () => {
+  assert.deepEqual(problems([whiteTee, jeans, sneakers]), []);
+  assert.deepEqual(problems([redTee, greenChinos, sneakers]), ['More than one non-neutral colour']);
+  assert.deepEqual(problems([whiteTee, suitTrousers, sneakers]), ['Formality is too far apart']);
+});
+
 test('a dress plus shoes is an outfit', () => {
   const dress = item({ name: 'dress', category: 'dress' });
   assert.deepEqual(outfitNames(validOutfits([dress, sneakers])), ['dress + sneakers']);
@@ -53,6 +59,16 @@ test('unworn outfits excludes combinations already worn together', () => {
   const unworn = outfitNames(unwornOutfits(items, [wear]));
   assert.ok(!unworn.includes('white tee + jeans + sneakers'));
   assert.ok(unworn.includes('red tee + jeans + sneakers'));
+});
+
+test('lastWornTogether finds the latest date, and ignores extra pieces', () => {
+  const jacket = item({ category: 'outerwear' });
+  const wears: Wear[] = [
+    { id: 'a', date: '2026-10-01', itemIds: [whiteTee.id, jeans.id, sneakers.id] },
+    { id: 'b', date: '2026-10-09', itemIds: [whiteTee.id, jeans.id, sneakers.id, jacket.id] },
+  ];
+  assert.equal(lastWornTogether([whiteTee, jeans, sneakers], wears), '2026-10-09');
+  assert.equal(lastWornTogether([redTee, jeans, sneakers], wears), undefined);
 });
 
 test('pairingCounts lists items that go with nothing first', () => {

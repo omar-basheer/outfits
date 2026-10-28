@@ -1,4 +1,4 @@
-import type { Item } from '../shared/types';
+import type { Category, Item } from '../shared/types';
 import { photoUrl } from './api';
 
 interface Props {
@@ -20,6 +20,20 @@ export function OutfitRow({ items }: { items: Item[] }) {
     <div className="outfit-row">
       {items.map((item) => (
         <Thumb key={item.id} item={item} />
+      ))}
+    </div>
+  );
+}
+
+const STACK_ORDER: Category[] = ['outerwear', 'top', 'dress', 'bottom', 'shoes', 'accessory'];
+
+// An outfit laid out top to bottom, like it would look worn.
+export function OutfitStack({ items }: { items: Item[] }) {
+  const ordered = [...items].sort((a, b) => STACK_ORDER.indexOf(a.category) - STACK_ORDER.indexOf(b.category));
+  return (
+    <div className="stack">
+      {ordered.map((item) => (
+        <img key={item.id} className={item.category} src={photoUrl(item)} alt={item.name || item.category} />
       ))}
     </div>
   );

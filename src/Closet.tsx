@@ -9,7 +9,6 @@ interface Props {
 }
 
 export function Closet({ items, onChange }: Props) {
-  const [filter, setFilter] = useState<Category | 'all'>('all');
   const [editing, setEditing] = useState<Item | null>(null);
   const [progress, setProgress] = useState('');
 
@@ -29,8 +28,6 @@ export function Closet({ items, onChange }: Props) {
     await onChange();
   }
 
-  const shown = filter === 'all' ? items : items.filter((item) => item.category === filter);
-
   return (
     <section>
       <h1>Closet · {items.length}</h1>
@@ -47,19 +44,24 @@ export function Closet({ items, onChange }: Props) {
       </div>
       {progress && <p className="hint">{progress}</p>}
 
-      <div className="chips">
-        {(['all', ...CATEGORIES] as const).map((name) => (
-          <button key={name} className={name === filter ? 'chip on' : 'chip'} onClick={() => setFilter(name)}>
-            {name}
-          </button>
-        ))}
-      </div>
+      {items.length === 0 && <p className="hint">Start your closet. Photograph a few tops, bottoms and shoes.</p>}
 
-      <div className="grid">
-        {shown.map((item) => (
-          <Thumb key={item.id} item={item} onClick={() => setEditing(item)} />
-        ))}
-      </div>
+      {CATEGORIES.map((category) => {
+        const inCategory = items.filter((item) => item.category === category);
+        if (inCategory.length === 0) return null;
+        return (
+          <div key={category}>
+            <h2 className="category">
+              {category} <span className="hint">{inCategory.length}</span>
+            </h2>
+            <div className="rail">
+              {inCategory.map((item) => (
+                <Thumb key={item.id} item={item} onClick={() => setEditing(item)} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       {editing && (
         <ItemEditor

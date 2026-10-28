@@ -1,4 +1,4 @@
-import { NEUTRALS, SEASONS, type Category, type Item, type Wear } from '../shared/types';
+import { NEUTRALS, SEASONS, type Category, type Item, type Wear } from './types';
 
 // An outfit here means its core pieces: (top + bottom, or a dress) + shoes.
 export type Outfit = Item[];
@@ -23,7 +23,15 @@ const atMostOneNonNeutralColor: Rule = (outfit) => {
 const sharesASeason: Rule = (outfit) =>
   SEASONS.some((season) => outfit.every((item) => item.seasons.length === 0 || item.seasons.includes(season)));
 
-const rules: Rule[] = [formalityIsClose, atMostOnePattern, atMostOneNonNeutralColor, sharesASeason];
+const rules: { problem: string; passes: Rule }[] = [
+  { problem: 'Formality is too far apart', passes: formalityIsClose },
+  { problem: 'More than one patterned piece', passes: atMostOnePattern },
+  { problem: 'More than one non-neutral colour', passes: atMostOneNonNeutralColor },
+  { problem: "These pieces don't share a season", passes: sharesASeason },
+];
+
+// What's wrong with this outfit, in words. Empty means it works.
+export const problems = (outfit: Outfit) => rules.filter((rule) => !rule.passes(outfit)).map((rule) => rule.problem);
 
 // ---- Combinations ----
 
@@ -36,15 +44,19 @@ export function validOutfits(items: Item[]): Outfit[] {
 
   return bases
     .flatMap((base) => of('shoes').map((shoes) => [...base, shoes]))
-    .filter((outfit) => rules.every((rule) => rule(outfit)));
+    .filter((outfit) => problems(outfit).length === 0);
 }
 
-// A wear covers an outfit if every core piece was worn that day (extra pieces like a jacket don't matter).
-const wasWorn = (outfit: Outfit, wears: Wear[]) =>
-  wears.some((wear) => outfit.every((item) => wear.itemIds.includes(item.id)));
+// The latest date every core piece was worn together (extra pieces like a jacket don't matter).
+export const lastWornTogether = (outfit: Outfit, wears: Wear[]) =>
+  wears
+    .filter((wear) => outfit.every((item) => wear.itemIds.includes(item.id)))
+    .map((wear) => wear.date)
+    .sort()
+    .at(-1);
 
 export const unwornOutfits = (items: Item[], wears: Wear[]) =>
-  validOutfits(items).filter((outfit) => !wasWorn(outfit, wears));
+  validOutfits(items).filter((outfit) => !lastWornTogether(outfit, wears));
 
 // How many valid outfits each core item appears in. Zero means it goes with nothing.
 export function pairingCounts(items: Item[]) {

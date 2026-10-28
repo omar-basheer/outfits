@@ -1,66 +1,97 @@
 import { useEffect, useState } from 'react';
-import { CATEGORIES, type Item, type Wear } from '../shared/types';
+import type { Item, Wear } from '../shared/types';
+import { lastWornTogether, suggestOutfit } from '../shared/pairings';
 import { api, todayString } from './api';
-import { OutfitRow, Thumb } from './Thumb';
+import { OutfitBuilder } from './OutfitBuilder';
+import { OutfitRow, OutfitStack } from './Thumb';
+
+interface Draft {
+  start: Item[];
+  date: string;
+  replacing?: Wear;
+}
 
 export function Today({ items }: { items: Item[] }) {
-  const [date, setDate] = useState(todayString());
-  const [chosen, setChosen] = useState<string[]>([]);
-  const [wears, setWears] = useState<Wear[]>([]);
+  const today = todayString();
+  const [wears, setWears] = useState<Wear[] | null>(null);
+  const [suggestion, setSuggestion] = useState<Item[] | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
 
   const reloadWears = () => api.wears().then(setWears);
   useEffect(() => void reloadWears(), []);
 
-  const toggle = (id: string) => setChosen((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  // Pick a suggestion once the closet and history are both loaded, and again after anything is logged.
+  useEffect(() => {
+    if (wears) setSuggestion(suggestOutfit(items, wears, today));
+  }, [items, wears, today]);
 
-  async function suggest() {
-    const outfit = await api.suggestion();
-    if (!outfit) return alert('No valid outfits yet. Add tops, bottoms and shoes first.');
-    setChosen(outfit.map((item) => item.id));
-  }
+  if (!wears) return <p className="hint">Loading…</p>;
 
-  async function logWear() {
-    await api.logWear(date, chosen);
-    setChosen([]);
-    await reloadWears();
+  if (draft) {
+    return (
+      <OutfitBuilder
+        items={items}
+        wears={wears}
+        {...draft}
+        onCancel={() => setDraft(null)}
+        onDone={async () => {
+          setDraft(null);
+          await reloadWears();
+        }}
+      />
+    );
   }
 
   const byId = new Map(items.map((item) => [item.id, item]));
+  const outfitOf = (wear: Wear) => wear.itemIds.flatMap((id) => byId.get(id) ?? []);
+  const todaysWear = wears.find((wear) => wear.date === today);
+
+  async function wearSuggestion() {
+    await api.logWear(today, suggestion!.map((item) => item.id));
+    await reloadWears();
+  }
 
   return (
     <section>
-      <h1>What are you wearing?</h1>
-
-      <div className="actions">
-        <button className="button secondary" onClick={suggest}>Suggest an outfit</button>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </div>
-
-      {CATEGORIES.map((category) => {
-        const inCategory = items.filter((item) => item.category === category);
-        if (inCategory.length === 0) return null;
-        return (
-          <div key={category}>
-            <h2>{category}</h2>
-            <div className="strip">
-              {inCategory.map((item) => (
-                <Thumb key={item.id} item={item} selected={chosen.includes(item.id)} onClick={() => toggle(item.id)} />
-              ))}
-            </div>
+      {todaysWear ? (
+        <>
+          <h1>You're wearing</h1>
+          <div className="card">
+            <OutfitStack items={outfitOf(todaysWear)} />
           </div>
-        );
-      })}
+          <div className="actions">
+            <button className="button secondary" onClick={() => setDraft({ start: outfitOf(todaysWear), date: today, replacing: todaysWear })}>
+              Change
+            </button>
+          </div>
+        </>
+      ) : suggestion ? (
+        <>
+          <h1>Wear this today</h1>
+          <p className="hint">{lastWornTogether(suggestion, wears) ? 'Worn together before' : 'Never worn together'}</p>
+          <div className="card">
+            <OutfitStack items={suggestion} />
+          </div>
+          <div className="actions">
+            <button className="button secondary" onClick={() => setDraft({ start: suggestion, date: today })}>Swap</button>
+            <button className="button" onClick={wearSuggestion}>Wear this</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <h1>Wear this today</h1>
+          <p className="hint">Add at least a top, a bottom and shoes in the Closet tab and your first outfit shows up here.</p>
+        </>
+      )}
 
-      <button className="button wide" disabled={chosen.length === 0} onClick={logWear}>
-        Log outfit for {date === todayString() ? 'today' : date}
-      </button>
+      <button className="link" onClick={() => setDraft({ start: [], date: today })}>Log a different day</button>
 
       <h2>Recently worn</h2>
-      {wears.slice(0, 14).map((wear) => (
+      {wears.slice(0, 5).map((wear) => (
         <div key={wear.id} className="wear">
           <div>
             <strong>{wear.date}</strong>
-            <OutfitRow items={wear.itemIds.flatMap((id) => byId.get(id) ?? [])} />
+            <OutfitRow items={outfitOf(wear)} />
           </div>
           <button className="chip" onClick={() => api.deleteWear(wear.id).then(reloadWears)}>Remove</button>
         </div>

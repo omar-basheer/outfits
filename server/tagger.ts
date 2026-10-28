@@ -8,7 +8,7 @@ const PROMPT = `You are tagging one item from a person's wardrobe for an outfit 
 Reply with ONLY a JSON object with these keys:
 - name: short plain description, e.g. "navy chore jacket"
 - category: one of ${CATEGORIES.join(', ')}
-- colors: 1-2 of ${COLORS.join(', ')}, dominant first
+- colors: 1-2 of ${COLORS.join(', ')}, dominant first; use "denim" for denim fabric, never "blue"
 - pattern: one of ${PATTERNS.join(', ')}
 - formality: integer from 1 (loungewear) to 5 (formal)
 - seasons: any of ${SEASONS.join(', ')} that the item suits`;

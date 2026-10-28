@@ -23,7 +23,6 @@ export const api = {
   deleteWear: (id: string) => send('DELETE', `/api/wears/${id}`).then(parse<void>),
 
   insights: () => fetch('/api/insights').then(parse<Insights>),
-  suggestion: () => fetch('/api/suggestion').then(parse<Item[] | null>),
 };
 
 export const photoUrl = (item: Item) => `/photos/${item.photo}`;
