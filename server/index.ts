@@ -3,13 +3,18 @@ import multer from 'multer';
 import { ObjectId } from 'mongodb';
 import { randomUUID } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { connect, items, wears, toItem, toWear } from './db';
+import { connect, items, ping, wears, toItem, toWear } from './db';
+import { passwordGate } from './auth';
 import { DEFAULT_TAGS, cleanTags } from './tags';
 import { tagPhoto } from './tagger';
 import { cutOut } from './cutout';
 import { FATIGUE_WEARS, itemUsage, outfitRepeats, pairingCounts, unwornOutfits } from '../shared/pairings';
 
-const PHOTO_DIR = new URL('../data/photos/', import.meta.url).pathname;
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && !process.env.APP_PASSWORD) throw new Error('APP_PASSWORD is required in production: the app has no other login.');
+if (isProduction && !process.env.PHOTO_DIR) throw new Error('PHOTO_DIR is required in production: point it at a persistent volume, or photos vanish on every deploy.');
+
+const PHOTO_DIR = (process.env.PHOTO_DIR ?? new URL('../data/photos/', import.meta.url).pathname).replace(/\/?$/, '/');
 const DIST_DIR = new URL('../dist/', import.meta.url).pathname;
 
 const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
@@ -18,6 +23,14 @@ const loadWears = async () => (await wears.find().sort({ date: -1 }).toArray()).
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const app = express();
+
+// Railway's health check. It sits before the password gate so the platform can reach it.
+app.get('/healthz', async (_req, res) => {
+  await ping();
+  res.sendStatus(200);
+});
+
+if (process.env.APP_PASSWORD) app.use(passwordGate(process.env.APP_PASSWORD));
 app.use(express.json());
 app.use('/photos', express.static(PHOTO_DIR));
 
@@ -111,7 +124,7 @@ app.get('/api/insights', async (_req, res) => {
 
 // ---- Production: serve the built UI from the same process ----
 
-if (process.env.NODE_ENV === 'production') {
+if (isProduction) {
   app.use(express.static(DIST_DIR));
   app.get('/{*path}', (_req, res) => res.sendFile(DIST_DIR + 'index.html'));
 }
